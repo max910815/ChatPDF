@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF GPT</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.12.313/pdf.min.js"></script>
+    <style>
+        body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f0f0f0;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 30px;
+    background-color: white;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+    font-size: 24px;
+    margin-bottom: 20px;
+}
+
+.row {
+    display: flex;
+    justify-content: space-between;
+}
+
+.group {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #ccc;
+    background-color: #f8f8f8;
+    margin-bottom: 20px;
+}
+
+input[type="text"],
+input[type="file"],
+textarea {
+    display: block;
+    width: 100%;
+    padding: 5px;
+    margin-bottom: 10px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+button {
+    display: inline;
+    width: 100%;
+    padding: 10px;
+    font-size: 14px;
+    background-color: #4CAF50;
+    border: none;
+    color: white;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #45a049;
+}
+
+textarea {
+    height: 150px;
+    resize: none;
+}
+    </style>
+
+</head>
+
+<body>
+    <div class="container">
+        <h1>PDF GPT</h1>
+        <p>PDF GPT allows you to chat with your PDF file using Universal Sentence Encoder and Open AI. It gives
+            hallucination free response than other tools as the embeddings are better than OpenAI. The returned response
+            can even cite the page number in square brackets([]) where the information is located, adding credibility to
+            the responses and helping to locate pertinent information quickly.</p>
+        <div class="row">
+            <div class="group">
+                <p>Get your Open AI API key <a href="https://platform.openai.com/account/api-keys">here</a></p>
+                <input type="text" id="openAIKey" placeholder="Enter your OpenAI API key here">
+                <input type="text" id="pdfUrl" placeholder="Enter PDF URL here">
+                <p>OR</p>
+                <input type="file" id="pdfFile" accept=".pdf">
+                <input type="text" id="question" placeholder="Enter your question here">
+                <button id="submit">Submit</button>
+            </div>
+            <div class="group">
+                <textarea id="answer" placeholder="The answer to your question is:" readonly></textarea>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <!-- <script src="pdfjs-dist/legacy/build/pdf.js"></script> -->
+    <script src="https://mozilla.github.io/pdf.js/build/pdf.js"></script>
+
+
+    <script>
+
+
+        let text_list1 = []
+        function download_pdf(url) {
+            pdfjsLib.getDocument(url).promise.then(function (pdf) {
+                var totalPages = pdf.numPages;
+                var pageNumber = 1;  // 開始讀取第一頁
+
+                async function readPage() {
+                    pdf.getPage(pageNumber).then(async function (page) {
+                        // Instead of rendering the page to a canvas, we get its text content
+                        page.getTextContent().then(async function (textContent) {
+                            // textContent contains an array of text items. We combine their strings to get the full page text
+                            var pageText = textContent.items.map(function (item) {
+                                return item.str;
+                            }).join(' ');
+                            // console.log("3333")
+                            // console.log('Page ' + pageNumber + ': ' + pageText);
+                            text_list.push(pageText)
+                            // console.log("4444")
+                            // console.log(text_list.map(item => console.log(item)))
+                            // Continue with the next page
+                            if (pageNumber < totalPages) {
+                                pageNumber++;
+                                await readPage();
+                            }
+                        });
+                    });
+                }
+                readPage();
+            });
+        }
+
+        let text_list2 = [];
+        document.getElementById('pdfFile').addEventListener('change', function (event) {
+            let file = event.target.files[0];
+
+            if (file.type != "application/pdf") {
+                console.error(file.name, "is not a pdf file.")
+                return
+            }
+
+            let fileReader = new FileReader();
+            fileReader.onload = function (ev) {
+                let typedarray = new Uint8Array(this.result);
+
+                let pdfjsLib = window['pdfjs-dist/build/pdf'];
+
+
+                pdfjsLib.getDocument(typedarray).promise.then(function (pdf) {
+                    console.log('Number of pages:', pdf.numPages);
+
+                    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                        pdf.getPage(pageNum).then(function (page) {
+                            page.getTextContent().then(function (textContent) {
+                                let pageText = '';
+                                for (let i = 0; i < textContent.items.length; i++) {
+                                    let textItem = textContent.items[i];
+                                    pageText += textItem.str + '\n';
+                                }
+                                // Remove multiple consecutive line breaks
+                                pageText = pageText.replace(/\n/g, ' ');
+                                text_list2.push(pageText);
+                            });
+                        });
+                    }
+                }, function (reason) {
+                    console.error(reason);
+                });
+            };
+
+            fileReader.readAsArrayBuffer(file);
+        });
+
+        const { getDocument } = pdfjsLib;
+
+        let chunks = [];
+            async function text_to_chunks(texts, word_length = 15, start_page = 1) {
+                // console.log("2222")
+                // console.log(texts)
+                let text_toks = texts.map(t => t.split(' '));
+                // console.log("text_toks", text_toks)
+
+                for (let idx = 0; idx < text_toks.length; idx++) {
+                    const words = text_toks[idx];
+                    // console.log("words", words)
+                    for (let i = 0; i < words.length; i += word_length) {
+                        // console.log("word_len",word_length, "i", i)
+                        let chunk = words.slice(i, i + word_length);
+                        // console.log("chuck1", chunk)
+                        if ((i + word_length) > words.length && (chunk.length < word_length) && (texts.length !== (idx + 1))) {
+                            text_toks[idx + 1] = chunk.concat(text_toks[idx + 1]);
+                            continue;
+                        }
+                        chunk = chunk.join(' ').trim();
+                        // console.log("chunk2", chunk)
+                        chunk = `[${idx + start_page}]` + ' ' + '"' + chunk + '"';
+
+                        chunks.push(chunk);
+                    }
+                }
+                // console.log("1111")
+                // console.log(chunks)
+                return chunks;
+            }
+
+
+
+        // const OPENAI_API_KEY = "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"
+
+        async function getEmbedding(text) {
+            let z = 1
+            console.log(z)
+            z+=1
+            const url = "https://api.openai.com/v1/embeddings";
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${OPENAI_API_KEY}`
+                },
+                body: JSON.stringify({
+                    input: text,
+                    model: "text-embedding-ada-002"
+                })
+            });
+            const data = await response.json();
+            return data.data[0].embedding;
+        }
+
+
+        function dotProduct(vec1, vec2) {
+            let dot = 0;
+            for (let i = 0; i < vec1.length; i++) {
+                dot += vec1[i] * vec2[i];
+            }
+            return dot;
+        }
+
+
+        function magnitude(vec) {
+            let sumOfSquares = 0;
+            for (let i = 0; i < vec.length; i++) {
+                sumOfSquares += vec[i] * vec[i];
+            }
+            return Math.sqrt(sumOfSquares);
+        }
+
+        function cosineSimilarity(vec1, vec2) {
+            let dot = dotProduct(vec1, vec2);
+            let mag1 = magnitude(vec1);
+            let mag2 = magnitude(vec2);
+            return dot / (mag1 * mag2);
+        }
+
+
+        let similarity = [];
+        let topFive = [];
+        let embedding = [];
+        async function RunCosineSimilarity(embeding, question) {
+
+            let question_getEmbedding = await getEmbedding(question)
+            const Similarity = embedding.map(elements => elements.map(element => cosineSimilarity(element, question_getEmbedding)))
+            similarity.push(await Promise.all(Similarity))
+            let combined = embedding.map(values => values.map((value, i) => ({ embedding: value, similarity: similarity[0][0][i] })));
+            combined = combined.flat()
+            combined.sort((x, y) => x.similarity - y.similarity);
+            topFive.push(combined.slice(0, 5));
+        }
+
+        async function RunGetembedding(chunks) {
+            console.log(chunks)
+            console.log("chucks_len", chunks.length)
+            const promises = chunks.map(element => getEmbedding(element));
+            embedding.push(await Promise.all(promises));
+        }
+
+        // const OPENAI_API_KEY = "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"; // 替换为您的OpenAI API密钥
+
+        async function generateText(text) {
+            const url = "https://api.openai.com/v1/completions";
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${OPENAI_API_KEY}`
+                },
+                body: JSON.stringify({
+                    model: "text-davinci-003",
+                    prompt: text,
+                    "max_tokens": 100,
+                    "temperature": 0
+                })
+            });
+            const data = await (response.json());
+            return await data;
+        }
+
+
+
+        async function generateAnswer(question, topnChunks) {
+
+            let prompt = "";
+            prompt += "search results:\n\n";
+            for (const c of topnChunks) {
+                prompt += c + "\n\n";
+            }
+
+            prompt +=
+                "Instructions: Compose a comprehensive reply to the query using the search results given. " +
+                "Cite each reference using [ Page Number] notation (every result has this number at the beginning). " +
+                "Citation should be done at the end of each sentence. If the search results mention multiple subjects " +
+                "with the same name, create separate answers for each. Only include information found in the results and " +
+                "don't add any additional information. Make sure the answer is correct and don't output false content. " +
+                "If the text does not relate to the query, simply state 'Text Not Found in PDF'. Ignore outlier " +
+                "search results which has nothing to do with the question. Only answer what is asked. The " +
+                "answer should be short and concise. Answer step-by-step. \n\nQuery: {question}\nAnswer: ";
+
+            prompt += `Query: ${question}\nAnswer:`;
+            const answer = await generateText(prompt);
+            return answer;
+        }
+        let startPage = 1;
+        async function doURL(url) {
+            await download_pdf(pdfUrl);
+            await text_to_chunks(text_list1, 150);
+            await RunGetembedding(chunks);
+            await RunCosineSimilarity(embedding, question);
+            await generateAnswer(question, topFive);
+        }
+
+        async function dofile() {
+            await text_to_chunks(text_list2, 150);
+            console.log("text_list2",text_list2)
+            await RunGetembedding(chunks);
+            await RunCosineSimilarity(embedding, question);
+            await generateAnswer(question, topFive);
+        }
+
+        document.getElementById("submit").addEventListener("click", async function () {
+            let openAIKey = document.getElementById("openAIKey").value;
+            let pdfUrl = document.getElementById("pdfUrl").value;
+            let pdfFile = document.getElementById("pdfFile").files[0];
+            let question = document.getElementById("question").value;
+            let answerElement = document.getElementById("answer");
+
+            if (openAIKey === '') {
+                answerElement.value = '[ERROR]: Please enter your Open AI Key. Get your key here: https://platform.openai.com/account/api-keys';
+                return;
+            } else {
+                OPENAI_API_KEY = openAIKey
+            }
+
+            if (pdfUrl === '' && !pdfFile) {
+                answerElement.value = '[ERROR]: Both URL and PDF is empty. Provide at least one.';
+                return;
+            }
+
+            if (question === '') {
+                answerElement.value = '[ERROR]: Question field is empty';
+                return;
+            }
+
+            if (pdfUrl !== '' && pdfFile) {
+                answerElement.value = '[ERROR]: Both URL and PDF is provided. Please provide only one (either URL or PDF).';
+                return;
+            }
+
+            if (pdfUrl !== "" && !pdfFile) {
+                doURL(pdfUrl)
+            }
+
+            if (pdfUrl === "" && pdfFile) {
+                dofile(pdfFile)
+            }
+        });
+
+    </script>
+</body>
+
+</html>
