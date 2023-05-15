@@ -192,7 +192,7 @@ textarea {
                     const words = text_toks[idx];
                     // console.log("words", words)
                     for (let i = 0; i < words.length; i += word_length) {
-                        console.log("word_len",word_length, "i", i)
+                        // console.log("word_len",word_length, "i", i)
                         let chunk = words.slice(i, i + word_length);
                         // console.log("chuck1", chunk)
                         if ((i + word_length) > words.length && (chunk.length < word_length) && (texts.length !== (idx + 1))) {
@@ -212,13 +212,8 @@ textarea {
             }
 
 
-
-        
-        let z = 1
-        async function getEmbedding(text) {
-            console.log("text\n", text)
-            console.log(z)
-            z= z+1
+    async function (text) {
+            
             const url = "https://api.openai.com/v1/embeddings";
             const response = await fetch(url, {
                 method: "POST",
@@ -233,7 +228,7 @@ textarea {
             });
             const data = await response.json();
             embedding.push(await Promise.all(data.data[0].embedding))
-            console.log("embedding", embedding)
+            // console.log("embedding", embedding)
             return data.data[0].embedding;
         }
 
@@ -266,14 +261,18 @@ textarea {
         let similarity = [];
         let topFive = [];
         let embedding = [];
-        async function RunCosineSimilarity(embeding, question) {
+        function RunCosineSimilarity(embeding, question) {
             console.log("qusetion")
-            let question_getEmbedding = await getEmbedding(question)
+            let question_getEmbedding = getEmbedding(question)
             const Similarity = embedding.map(elements => elements.map(element => cosineSimilarity(element, question_getEmbedding)))
-            similarity.push(await Promise.all(Similarity))
+            similarity.push(Similarity)
             let combined = embedding.map(values => values.map((value, i) => ({ embedding: value, similarity: similarity[0][0][i] })));
-            combined = combined.flat()
+            combined = combined.flat();
+            console.log("combined1", combined);
+            console.log("combined1", combined.similarity);
+            console.log("combined1",combined.similarity[0]);
             combined.sort((x, y) => x.similarity - y.similarity);
+            console.log("combined2", combined.similarity[0][0]);
             topFive.push(combined.slice(1, 6));
         }
 
