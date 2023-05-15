@@ -166,6 +166,7 @@ textarea {
                                 }
                                 // Remove multiple consecutive line breaks
                                 pageText = pageText.replace(/\n/g, ' ');
+                                // console.log("pageText", pageText)
                                 text_list2.push(pageText);
                             });
                         });
@@ -191,7 +192,7 @@ textarea {
                     const words = text_toks[idx];
                     // console.log("words", words)
                     for (let i = 0; i < words.length; i += word_length) {
-                        // console.log("word_len",word_length, "i", i)
+                        console.log("word_len",word_length, "i", i)
                         let chunk = words.slice(i, i + word_length);
                         // console.log("chuck1", chunk)
                         if ((i + word_length) > words.length && (chunk.length < word_length) && (texts.length !== (idx + 1))) {
@@ -205,19 +206,19 @@ textarea {
                         chunks.push(chunk);
                     }
                 }
-                // console.log("1111")
-                // console.log(chunks)
+                    // console.log("1111")
+                    // console.log(chunks)
                 return chunks;
             }
 
 
 
-        // const OPENAI_API_KEY = "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"
-
+        
+        let z = 1
         async function getEmbedding(text) {
-            let z = 1
+            console.log("text\n", text)
             console.log(z)
-            z+=1
+            z= z+1
             const url = "https://api.openai.com/v1/embeddings";
             const response = await fetch(url, {
                 method: "POST",
@@ -231,6 +232,8 @@ textarea {
                 })
             });
             const data = await response.json();
+            embedding.push(await Promise.all(data.data[0].embedding))
+            console.log("embedding", embedding)
             return data.data[0].embedding;
         }
 
@@ -264,24 +267,23 @@ textarea {
         let topFive = [];
         let embedding = [];
         async function RunCosineSimilarity(embeding, question) {
-
+            console.log("qusetion")
             let question_getEmbedding = await getEmbedding(question)
             const Similarity = embedding.map(elements => elements.map(element => cosineSimilarity(element, question_getEmbedding)))
             similarity.push(await Promise.all(Similarity))
             let combined = embedding.map(values => values.map((value, i) => ({ embedding: value, similarity: similarity[0][0][i] })));
             combined = combined.flat()
             combined.sort((x, y) => x.similarity - y.similarity);
-            topFive.push(combined.slice(0, 5));
+            topFive.push(combined.slice(1, 6));
         }
 
         async function RunGetembedding(chunks) {
             console.log(chunks)
             console.log("chucks_len", chunks.length)
             const promises = chunks.map(element => getEmbedding(element));
-            embedding.push(await Promise.all(promises));
+            
         }
 
-        // const OPENAI_API_KEY = "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"; // 替换为您的OpenAI API密钥
 
         async function generateText(text) {
             const url = "https://api.openai.com/v1/completions";
@@ -331,17 +333,25 @@ textarea {
             await download_pdf(pdfUrl);
             await text_to_chunks(text_list1, 150);
             await RunGetembedding(chunks);
-            await RunCosineSimilarity(embedding, question);
+            await RunCosineSimilarity(embedding, questions);
             await generateAnswer(question, topFive);
         }
 
         async function dofile() {
             await text_to_chunks(text_list2, 150);
-            console.log("text_list2",text_list2)
+            // console.log("text_list2",text_list2)
+            console.log("chunks", chunks)
             await RunGetembedding(chunks);
-            await RunCosineSimilarity(embedding, question);
+            console.log("question1",questions);
+            debugger
+            await RunCosineSimilarity(embedding, questions);
             await generateAnswer(question, topFive);
         }
+        let questions;
+        question.addEventListener('input', function (e) {
+            questions = e.target.value;
+            console.log('你输入的文字是: ' + questions);
+        });
 
         document.getElementById("submit").addEventListener("click", async function () {
             let openAIKey = document.getElementById("openAIKey").value;
