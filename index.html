@@ -120,10 +120,8 @@ textarea {
                             var pageText = textContent.items.map(function (item) {
                                 return item.str;
                             }).join(' ');
-                            // console.log("3333")
                             // console.log('Page ' + pageNumber + ': ' + pageText);
                             text_list.push(pageText)
-                            // console.log("4444")
                             // console.log(text_list.map(item => console.log(item)))
                             // Continue with the next page
                             if (pageNumber < totalPages) {
@@ -183,10 +181,8 @@ textarea {
 
         let chunks = [];
             async function text_to_chunks(texts, word_length = 15, start_page = 1) {
-                // console.log("2222")
                 // console.log(texts)
                 let text_toks = texts.map(t => t.split(' '));
-                // console.log("text_toks", text_toks)
 
                 for (let idx = 0; idx < text_toks.length; idx++) {
                     const words = text_toks[idx];
@@ -206,8 +202,6 @@ textarea {
                         chunks.push(chunk);
                     }
                 }
-                    // console.log("1111")
-                    // console.log(chunks)
                 return chunks;
             }
 
